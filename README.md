@@ -163,36 +163,6 @@ Each graph run carries `topic`, `draft`, `feedback`, `decision`, and
 6. The loop stops when the answer passes or `MAX_REVISIONS` is reached.
 7. The final answer and workflow events are returned to the caller.
 
-### Deployment layout
-
-For Render, use two Web Services connected to the same repository:
-
-```text
-Streamlit service                 FastAPI service
-streamlit run ui.py               uvicorn main:app --host 0.0.0.0 --port $PORT
-        \                             /
-         \                           /
-              shared backend.py
-                    |
-                 Groq API
-```
-
-## Deploying a non-main branch on Render
-
-Render can deploy any pushed branch, not only `main`. When creating or editing a
-Web Service:
-
-1. Connect the GitHub repository.
-2. Select the required branch in the **Branch** field, for example `development`
-   or `feature/ui`.
-3. Set the build and start commands for that service.
-4. Add the required environment variables.
-5. Deploy the service.
-
-The service will automatically redeploy when new commits are pushed to the
-selected branch, unless automatic deploys are disabled. You can use separate
-Render services for separate branches, such as one service for `main` and another
-for a development branch.
 
 ## License
 
