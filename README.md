@@ -99,40 +99,100 @@ The `api_key` field is optional. If omitted, the API uses `GROQ_API_KEY` from th
 environment. For `/models`, an account-specific model list can be requested with
 the `X-Groq-API-Key` header.
 
-## Deploy on Render
+## System design
 
-### FastAPI service
+### High-level architecture
 
-Create a Render Web Service connected to this repository:
+```mermaid
+flowchart LR
+    User[User]
+    UI[Streamlit UI<br/>ui.py]
+    API[FastAPI API<br/>main.py]
+    Loop[Learning Loop<br/>backend.py]
+    Graph[LangGraph StateGraph]
+    Writer[Writer agent]
+    Reviewer[Reviewer agent]
+    Reviser[Reviser agent]
+    Groq[Groq LLM API]
+    Config[.env or BYOK key<br/>model selection]
 
-```text
-Build Command: pip install -r requirements.txt
-Start Command: uvicorn main:app --host 0.0.0.0 --port $PORT
+    User --> UI
+    User --> API
+    UI --> Loop
+    API --> Loop
+    Loop --> Graph
+    Graph --> Writer
+    Writer --> Reviewer
+    Reviewer -->|PASS| Loop
+    Reviewer -->|REVISE| Reviser
+    Reviser --> Reviewer
+    Writer --> Groq
+    Reviewer --> Groq
+    Reviser --> Groq
+    Config --> Groq
 ```
 
-### Streamlit service
+The Streamlit UI and FastAPI service are two entry points into the same workflow.
+The UI runs the loop directly, while the API exposes the loop for other clients.
 
-Create a second Render Web Service using the same repository:
+### Learning-loop workflow
 
-```text
-Build Command: pip install -r requirements.txt
-Start Command: streamlit run ui.py --server.address 0.0.0.0 --server.port $PORT
+```mermaid
+flowchart TD
+    Start([Topic submitted]) --> Init[Initialize shared state]
+    Init --> Write[Writer creates a 120-160 word draft]
+    Write --> Review[Reviewer checks the draft]
+    Review --> Decision{Decision}
+    Decision -->|PASS| Finish([Return final answer])
+    Decision -->|REVISE and limit remains| Revise[Reviser applies feedback]
+    Revise --> Review
+    Decision -->|REVISE and limit reached| Finish
 ```
 
-Add the following environment variables to each service as needed:
+Each graph run carries `topic`, `draft`, `feedback`, `decision`, and
+`revision_count` in its shared state.
+
+### Request flow
+
+1. A user submits a topic through Streamlit or `POST /run-loop`.
+2. The selected model and API key are passed to the backend.
+3. The writer generates the first draft through Groq.
+4. The reviewer returns a structured decision and feedback.
+5. If the decision is `REVISE`, the reviser updates the draft and sends it back
+   to the reviewer.
+6. The loop stops when the answer passes or `MAX_REVISIONS` is reached.
+7. The final answer and workflow events are returned to the caller.
+
+### Deployment layout
+
+For Render, use two Web Services connected to the same repository:
 
 ```text
-GROQ_API_KEY=your_groq_api_key
-GROQ_MODEL=llama-3.3-70b-versatile
-GROQ_MODELS=llama-3.3-70b-versatile,llama-3.1-8b-instant
-MAX_REVISIONS=2
+Streamlit service                 FastAPI service
+streamlit run ui.py               uvicorn main:app --host 0.0.0.0 --port $PORT
+        \                             /
+         \                           /
+              shared backend.py
+                    |
+                 Groq API
 ```
 
-## Learning objective
+## Deploying a non-main branch on Render
 
-This project is intended for learning loop engineering concepts such as agent
-roles, shared state, structured review decisions, conditional graph routing, and
-iterative self-correction.
+Render can deploy any pushed branch, not only `main`. When creating or editing a
+Web Service:
+
+1. Connect the GitHub repository.
+2. Select the required branch in the **Branch** field, for example `development`
+   or `feature/ui`.
+3. Set the build and start commands for that service.
+4. Add the required environment variables.
+5. Deploy the service.
+
+The service will automatically redeploy when new commits are pushed to the
+selected branch, unless automatic deploys are disabled. You can use separate
+Render services for separate branches, such as one service for `main` and another
+for a development branch.
 
 ## License
 
