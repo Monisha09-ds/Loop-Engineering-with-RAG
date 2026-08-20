@@ -1,0 +1,19 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+*.log
+.pytest_cache/
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local secrets
+.env
+
+# Local API logs
+api.stdout.log
+api.stderr.log
